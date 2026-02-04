@@ -1,0 +1,8 @@
+bin/
+vendor/
+.git
+.gitignore
+*.log
+*.md
+.env
+.DS_Store

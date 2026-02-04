@@ -1,0 +1,19 @@
+server:
+  port: 8080
+  readTimeout: 15s
+  writeTimeout: 15s
+
+database:
+  host: localhost
+  port: 5432
+  user: gnucash
+  password: gnucash
+  dbname: gnucash
+  sslmode: disable
+  maxConns: 10
+  minConns: 2
+
+jwt:
+  secret: your-secret-key-change-this-in-production
+  accessTokenTTL: 15m
+  refreshTokenTTL: 168h

@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.1-pg18-trixie
+    container_name: gnucash-db
+    environment:
+      POSTGRES_USER: gnucash
+      POSTGRES_PASSWORD: gnucash_password
+      POSTGRES_DB: gnucash
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    networks:
+      - gnucash-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gnucash"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: gnucash-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USER=gnucash
+      - DATABASE_PASSWORD=gnucash_password
+      - DATABASE_NAME=gnucash
+      - DATABASE_SSLMODE=disable
+      - JWT_SECRET=your-secret-key-change-this-in-production-min-32-chars
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - gnucash-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - REACT_APP_API_BASE_URL=http://localhost:8080/api/v1
+    container_name: gnucash-frontend
+    depends_on:
+      - backend
+    networks:
+      - gnucash-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  gnucash-network:
+    driver: bridge

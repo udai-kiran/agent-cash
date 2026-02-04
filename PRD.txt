@@ -1,0 +1,11 @@
+Develop a frontend and backend services.
+
+frontend:
+    - React based app.
+
+backed:
+    - Go based app.
+
+Backend should connect to a gnucash database. 
+
+React should show how the different stats, expenditure. etc.
