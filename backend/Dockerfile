@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.25-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git
@@ -22,15 +22,17 @@ FROM alpine:latest
 # Install ca-certificates for HTTPS
 RUN apk --no-cache add ca-certificates wget
 
-WORKDIR /root/
+# Create a non-root user first
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+WORKDIR /home/appuser
 
 # Copy the binary from builder
 COPY --from=builder /app/server .
 COPY --from=builder /app/configs ./configs
 
-# Create a non-root user
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-RUN chown -R appuser:appgroup /root
+# Set ownership
+RUN chown -R appuser:appgroup /home/appuser
 
 USER appuser
 

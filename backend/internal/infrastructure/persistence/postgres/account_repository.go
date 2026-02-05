@@ -143,15 +143,17 @@ func (r *AccountRepository) FindByType(ctx context.Context, accountType entity.A
 
 // GetBalance calculates the current balance for an account
 func (r *AccountRepository) GetBalance(ctx context.Context, guid string) (int64, int64, error) {
+	// Use a fixed high-precision denominator to normalize all splits
+	const targetDenom = 100000
 	query := `
-		SELECT COALESCE(SUM(s.quantity_num), 0) as total_num,
-		       COALESCE(MAX(s.quantity_denom), 100) as denom
+		SELECT ROUND(COALESCE(SUM(s.quantity_num::numeric * $2 / s.quantity_denom::numeric), 0)) as total_num,
+		       $2 as denom
 		FROM splits s
 		WHERE s.account_guid = $1
 	`
 
 	var numerator, denominator int64
-	err := r.db.QueryRow(ctx, query, guid).Scan(&numerator, &denominator)
+	err := r.db.QueryRow(ctx, query, guid, targetDenom).Scan(&numerator, &denominator)
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to calculate balance: %w", err)
 	}
@@ -168,6 +170,7 @@ func (r *AccountRepository) GetBalanceWithChildren(ctx context.Context, guid str
 	}
 
 	// Recursive CTE to get all child accounts
+	const targetDenom = 100000
 	query := `
 		WITH RECURSIVE account_tree AS (
 			SELECT guid FROM accounts WHERE guid = $1
@@ -175,14 +178,14 @@ func (r *AccountRepository) GetBalanceWithChildren(ctx context.Context, guid str
 			SELECT a.guid FROM accounts a
 			INNER JOIN account_tree at ON a.parent_guid = at.guid
 		)
-		SELECT COALESCE(SUM(s.quantity_num), 0) as total_num,
-		       COALESCE(MAX(s.quantity_denom), 100) as denom
+		SELECT ROUND(COALESCE(SUM(s.quantity_num::numeric * $2 / s.quantity_denom::numeric), 0)) as total_num,
+		       $2 as denom
 		FROM splits s
 		WHERE s.account_guid IN (SELECT guid FROM account_tree)
 	`
 
 	var numerator, denominator int64
-	err = r.db.QueryRow(ctx, query, guid).Scan(&numerator, &denominator)
+	err = r.db.QueryRow(ctx, query, guid, targetDenom).Scan(&numerator, &denominator)
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to calculate balance with children: %w", err)
 	}

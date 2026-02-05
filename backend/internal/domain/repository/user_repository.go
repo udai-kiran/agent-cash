@@ -19,4 +19,16 @@ type UserRepository interface {
 
 	// Update updates a user
 	Update(ctx context.Context, user *entity.User) error
+
+	// CreateRefreshToken stores a refresh token
+	CreateRefreshToken(ctx context.Context, userID int64, token string, expiresAt int64) error
+
+	// ValidateRefreshToken checks if a refresh token is valid and returns the user ID
+	ValidateRefreshToken(ctx context.Context, token string) (int64, error)
+
+	// DeleteRefreshToken removes a refresh token
+	DeleteRefreshToken(ctx context.Context, token string) error
+
+	// DeleteUserRefreshTokens removes all refresh tokens for a user
+	DeleteUserRefreshTokens(ctx context.Context, userID int64) error
 }

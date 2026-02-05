@@ -135,96 +135,37 @@ func (s *AnalyticsService) GetIncomeExpense(ctx context.Context, startDate, endD
 
 // GetCategoryBreakdown returns spending breakdown by category
 func (s *AnalyticsService) GetCategoryBreakdown(ctx context.Context, startDate, endDate time.Time) (*dto.CategoryBreakdownResponse, error) {
-	// Get income accounts
-	incomeAccounts, err := s.accountRepo.FindByType(ctx, entity.AccountTypeIncome)
+	// Get aggregated income data
+	incomeAggregates, err := s.transactionRepo.AggregateByAccountType(ctx, entity.AccountTypeIncome, &startDate, &endDate)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get income accounts: %w", err)
+		return nil, fmt.Errorf("failed to get income aggregates: %w", err)
 	}
 
-	// Get expense accounts
-	expenseAccounts, err := s.accountRepo.FindByType(ctx, entity.AccountTypeExpense)
+	// Get aggregated expense data
+	expenseAggregates, err := s.transactionRepo.AggregateByAccountType(ctx, entity.AccountTypeExpense, &startDate, &endDate)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get expense accounts: %w", err)
+		return nil, fmt.Errorf("failed to get expense aggregates: %w", err)
 	}
 
-	incomeBreakdown := make(map[string]*dto.CategoryBreakdownItem)
-	expenseBreakdown := make(map[string]*dto.CategoryBreakdownItem)
-
-	// Process income
-	for _, acc := range incomeAccounts {
-		filter := &repository.TransactionFilter{
-			AccountGUID: &acc.GUID,
-			StartDate:   &startDate,
-			EndDate:     &endDate,
-		}
-		transactions, err := s.transactionRepo.FindAll(ctx, filter)
-		if err != nil {
-			continue
-		}
-
-		total := decimal.Zero
-		count := 0
-		for _, tx := range transactions {
-			for _, split := range tx.Splits {
-				if split.AccountGUID == acc.GUID {
-					amount := gnucash.RationalToDecimal(split.ValueNum, split.ValueDenom)
-					total = total.Add(amount.Abs())
-					count++
-				}
-			}
-		}
-
-		if !total.IsZero() {
-			incomeBreakdown[acc.Name] = &dto.CategoryBreakdownItem{
-				Category: acc.Name,
-				Amount:   total.StringFixed(2),
-				Count:    count,
-			}
-		}
-	}
-
-	// Process expenses
-	for _, acc := range expenseAccounts {
-		filter := &repository.TransactionFilter{
-			AccountGUID: &acc.GUID,
-			StartDate:   &startDate,
-			EndDate:     &endDate,
-		}
-		transactions, err := s.transactionRepo.FindAll(ctx, filter)
-		if err != nil {
-			continue
-		}
-
-		total := decimal.Zero
-		count := 0
-		for _, tx := range transactions {
-			for _, split := range tx.Splits {
-				if split.AccountGUID == acc.GUID {
-					amount := gnucash.RationalToDecimal(split.ValueNum, split.ValueDenom)
-					total = total.Add(amount.Abs())
-					count++
-				}
-			}
-		}
-
-		if !total.IsZero() {
-			expenseBreakdown[acc.Name] = &dto.CategoryBreakdownItem{
-				Category: acc.Name,
-				Amount:   total.StringFixed(2),
-				Count:    count,
-			}
-		}
-	}
-
-	// Convert maps to slices
+	// Convert to response format
 	var incomeItems []dto.CategoryBreakdownItem
-	for _, item := range incomeBreakdown {
-		incomeItems = append(incomeItems, *item)
+	for _, agg := range incomeAggregates {
+		amount := gnucash.RationalToDecimal(agg.TotalAmount, agg.Denominator)
+		incomeItems = append(incomeItems, dto.CategoryBreakdownItem{
+			Category: agg.AccountName,
+			Amount:   amount.StringFixed(2),
+			Count:    agg.Count,
+		})
 	}
 
 	var expenseItems []dto.CategoryBreakdownItem
-	for _, item := range expenseBreakdown {
-		expenseItems = append(expenseItems, *item)
+	for _, agg := range expenseAggregates {
+		amount := gnucash.RationalToDecimal(agg.TotalAmount, agg.Denominator)
+		expenseItems = append(expenseItems, dto.CategoryBreakdownItem{
+			Category: agg.AccountName,
+			Amount:   amount.StringFixed(2),
+			Count:    agg.Count,
+		})
 	}
 
 	return &dto.CategoryBreakdownResponse{

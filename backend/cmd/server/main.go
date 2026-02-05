@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,13 +15,18 @@ import (
 	"github.com/udai-kiran/agentic-cash/internal/infrastructure/persistence/postgres"
 	httpRouter "github.com/udai-kiran/agentic-cash/internal/interfaces/http"
 	"github.com/udai-kiran/agentic-cash/internal/interfaces/http/handler"
+	"github.com/udai-kiran/agentic-cash/pkg/logger"
 )
 
 func main() {
+	// Initialize logger
+	logger.Init(os.Getenv("GO_ENV") == "production")
+
 	// Load configuration
 	cfg, err := config.Load("configs/config.yaml")
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		logger.Error("Failed to load config", "error", err)
+		os.Exit(1)
 	}
 
 	// Create context for database initialization
@@ -31,18 +35,25 @@ func main() {
 	// Initialize database connection pool
 	pool, err := postgres.NewPool(ctx, &cfg.Database)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		logger.Error("Failed to connect to database", "error", err)
+		os.Exit(1)
 	}
 	defer pool.Close()
 
-	log.Println("Connected to PostgreSQL successfully")
+	logger.Info("Connected to PostgreSQL successfully")
 
 	// Initialize application tables
 	if err := postgres.InitializeAppTables(ctx, pool); err != nil {
-		log.Fatalf("Failed to initialize app tables: %v", err)
+		logger.Error("Failed to initialize app tables", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("Application tables initialized")
+	logger.Info("Application tables initialized")
+
+	// Start token cleanup service (runs every 6 hours)
+	tokenCleanup := postgres.NewTokenCleanupService(pool, 6*time.Hour)
+	go tokenCleanup.Start(ctx)
+	defer tokenCleanup.Stop()
 
 	// Initialize JWT manager
 	jwtManager := auth.NewJWTManager(
@@ -76,6 +87,7 @@ func main() {
 		AnalyticsHandler:   analyticsHandler,
 		CommodityHandler:   commodityHandler,
 		JWTManager:         jwtManager,
+		AllowedOrigins:     cfg.CORS.AllowedOrigins,
 	})
 
 	// Create HTTP server
@@ -88,9 +100,10 @@ func main() {
 
 	// Start server in a goroutine
 	go func() {
-		log.Printf("Starting server on port %d", cfg.Server.Port)
+		logger.Info("Starting server", "port", cfg.Server.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Failed to start server: %v", err)
+			logger.Error("Failed to start server", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -99,15 +112,16 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down server...")
+	logger.Info("Shutting down server...")
 
 	// Graceful shutdown with timeout
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		logger.Error("Server forced to shutdown", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("Server exited")
+	logger.Info("Server exited")
 }

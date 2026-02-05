@@ -1,6 +1,8 @@
 package http
 
 import (
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/udai-kiran/agentic-cash/internal/infrastructure/auth"
 	"github.com/udai-kiran/agentic-cash/internal/interfaces/http/handler"
@@ -15,25 +17,36 @@ type RouterConfig struct {
 	AnalyticsHandler   *handler.AnalyticsHandler
 	CommodityHandler   *handler.CommodityHandler
 	JWTManager         *auth.JWTManager
+	AllowedOrigins     []string
 }
 
 // Router sets up the HTTP router
 func Router(cfg *RouterConfig) *gin.Engine {
 	r := gin.Default()
 
-	// Apply CORS middleware
-	r.Use(middleware.CORS())
+	// Apply middleware
+	r.Use(middleware.RequestID())
+	r.Use(middleware.LoggingMiddleware())
+	r.Use(middleware.RequestSizeLimit(10 * 1024 * 1024)) // 10MB limit
+	r.Use(middleware.SecurityHeaders())
+	r.Use(middleware.CORS(&middleware.CORSConfig{
+		AllowedOrigins: cfg.AllowedOrigins,
+	}))
 
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
+	// Rate limiter for auth endpoints: 5 requests per minute
+	authRateLimiter := middleware.NewRateLimiter(5, time.Minute)
+
 	// API v1
 	v1 := r.Group("/api/v1")
 	{
-		// Auth routes (public)
+		// Auth routes (public, rate limited)
 		auth := v1.Group("/auth")
+		auth.Use(authRateLimiter.Middleware())
 		{
 			auth.POST("/register", cfg.AuthHandler.Register)
 			auth.POST("/login", cfg.AuthHandler.Login)

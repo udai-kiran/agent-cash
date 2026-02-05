@@ -19,6 +19,15 @@ type TransactionFilter struct {
 	Offset       int
 }
 
+// AccountAggregate represents aggregated data for an account
+type AccountAggregate struct {
+	AccountGUID string
+	AccountName string
+	TotalAmount int64  // Numerator in rational representation
+	Denominator int64  // Denominator in rational representation
+	Count       int
+}
+
 // TransactionRepository defines the interface for transaction data access
 type TransactionRepository interface {
 	// FindAll retrieves all transactions with optional filtering
@@ -32,4 +41,7 @@ type TransactionRepository interface {
 
 	// Count returns the total number of transactions matching the filter
 	Count(ctx context.Context, filter *TransactionFilter) (int64, error)
+
+	// AggregateByAccountType returns aggregated transaction data grouped by account for accounts of specified type
+	AggregateByAccountType(ctx context.Context, accountType entity.AccountType, startDate, endDate *time.Time) ([]*AccountAggregate, error)
 }

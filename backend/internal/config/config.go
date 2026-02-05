@@ -12,6 +12,12 @@ type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
 	JWT      JWTConfig
+	CORS     CORSConfig
+}
+
+// CORSConfig holds CORS configuration
+type CORSConfig struct {
+	AllowedOrigins []string `mapstructure:"allowedOrigins"`
 }
 
 // ServerConfig holds HTTP server configuration
@@ -62,7 +68,8 @@ func Load(configPath string) (*Config, error) {
 	viper.SetDefault("database.sslmode", "disable")
 	viper.SetDefault("database.maxConns", 10)
 	viper.SetDefault("database.minConns", 2)
-	viper.SetDefault("jwt.secret", "change-this-secret-key")
+	viper.SetDefault("cors.allowedOrigins", []string{"http://localhost:3000"})
+	viper.SetDefault("jwt.secret", "")
 	viper.SetDefault("jwt.accessTokenTTL", "15m")
 	viper.SetDefault("jwt.refreshTokenTTL", "168h") // 7 days
 
@@ -79,6 +86,7 @@ func Load(configPath string) (*Config, error) {
 	viper.BindEnv("database.sslmode", "DATABASE_SSLMODE")
 	viper.BindEnv("server.port", "SERVER_PORT")
 	viper.BindEnv("jwt.secret", "JWT_SECRET")
+	viper.BindEnv("cors.allowedOrigins", "CORS_ALLOWED_ORIGINS")
 
 	// Try to read config file (optional in Docker)
 	if configPath != "" {
@@ -92,6 +100,10 @@ func Load(configPath string) (*Config, error) {
 	var config Config
 	if err := viper.Unmarshal(&config); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	if len(config.JWT.Secret) < 32 {
+		return nil, fmt.Errorf("JWT_SECRET must be at least 32 characters (set via JWT_SECRET env var)")
 	}
 
 	return &config, nil

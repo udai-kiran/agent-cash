@@ -8,7 +8,6 @@ import (
 	"github.com/udai-kiran/agentic-cash/internal/domain/entity"
 	"github.com/udai-kiran/agentic-cash/internal/domain/repository"
 	"github.com/udai-kiran/agentic-cash/internal/infrastructure/auth"
-	"github.com/udai-kiran/agentic-cash/internal/infrastructure/persistence/postgres"
 )
 
 // AuthService handles authentication business logic
@@ -73,12 +72,7 @@ func (s *AuthService) Login(ctx context.Context, req *dto.LoginRequest) (*dto.Au
 // RefreshToken generates a new access token from a refresh token
 func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*dto.AuthResponse, error) {
 	// Validate refresh token with the repository
-	userRepo, ok := s.userRepo.(*postgres.UserRepository)
-	if !ok {
-		return nil, fmt.Errorf("invalid repository type")
-	}
-
-	userID, err := userRepo.ValidateRefreshToken(ctx, refreshToken)
+	userID, err := s.userRepo.ValidateRefreshToken(ctx, refreshToken)
 	if err != nil {
 		return nil, fmt.Errorf("invalid or expired refresh token")
 	}
@@ -107,12 +101,7 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*d
 
 // Logout invalidates a user's refresh tokens
 func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
-	userRepo, ok := s.userRepo.(*postgres.UserRepository)
-	if !ok {
-		return fmt.Errorf("invalid repository type")
-	}
-
-	return userRepo.DeleteRefreshToken(ctx, refreshToken)
+	return s.userRepo.DeleteRefreshToken(ctx, refreshToken)
 }
 
 // generateAuthResponse generates access and refresh tokens for a user
@@ -130,11 +119,8 @@ func (s *AuthService) generateAuthResponse(ctx context.Context, user *entity.Use
 	}
 
 	// Store refresh token
-	userRepo, ok := s.userRepo.(*postgres.UserRepository)
-	if ok {
-		if err := userRepo.CreateRefreshToken(ctx, user.ID, refreshToken, expiresAt); err != nil {
-			return nil, fmt.Errorf("failed to store refresh token: %w", err)
-		}
+	if err := s.userRepo.CreateRefreshToken(ctx, user.ID, refreshToken, expiresAt); err != nil {
+		return nil, fmt.Errorf("failed to store refresh token: %w", err)
 	}
 
 	return &dto.AuthResponse{

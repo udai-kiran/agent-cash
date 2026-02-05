@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/udai-kiran/agentic-cash/internal/domain/entity"
@@ -203,6 +204,67 @@ func (r *TransactionRepository) Count(ctx context.Context, filter *repository.Tr
 	}
 
 	return count, nil
+}
+
+// AggregateByAccountType returns aggregated transaction data grouped by account for accounts of specified type
+func (r *TransactionRepository) AggregateByAccountType(ctx context.Context, accountType entity.AccountType, startDate, endDate *time.Time) ([]*repository.AccountAggregate, error) {
+	const targetDenom = 100000
+	query := `
+		SELECT
+			a.guid as account_guid,
+			a.name as account_name,
+			ROUND(COALESCE(SUM(ABS(s.value_num::numeric * $1 / s.value_denom::numeric)), 0)) as total_num,
+			$1 as denom,
+			COUNT(DISTINCT t.guid) as tx_count
+		FROM accounts a
+		LEFT JOIN splits s ON s.account_guid = a.guid
+		LEFT JOIN transactions t ON s.tx_guid = t.guid
+		WHERE a.account_type = $2
+	`
+
+	args := []interface{}{targetDenom, accountType}
+	argPos := 3
+
+	if startDate != nil {
+		query += fmt.Sprintf(" AND t.post_date >= $%d", argPos)
+		args = append(args, *startDate)
+		argPos++
+	}
+
+	if endDate != nil {
+		query += fmt.Sprintf(" AND t.post_date <= $%d", argPos)
+		args = append(args, *endDate)
+	}
+
+	query += `
+		GROUP BY a.guid, a.name
+		HAVING SUM(ABS(s.value_num)) > 0
+		ORDER BY total_num DESC
+	`
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to aggregate by account type: %w", err)
+	}
+	defer rows.Close()
+
+	var aggregates []*repository.AccountAggregate
+	for rows.Next() {
+		agg := &repository.AccountAggregate{}
+		err := rows.Scan(
+			&agg.AccountGUID,
+			&agg.AccountName,
+			&agg.TotalAmount,
+			&agg.Denominator,
+			&agg.Count,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan aggregate: %w", err)
+		}
+		aggregates = append(aggregates, agg)
+	}
+
+	return aggregates, nil
 }
 
 // loadSplitsForTransaction loads splits for a transaction
