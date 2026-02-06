@@ -4,18 +4,20 @@ services:
   postgres:
     image: pgvector/pgvector:0.8.1-pg18-trixie
     container_name: gnucash-db
+    env_file:
+      - .env
     environment:
       POSTGRES_USER: gnucash
       POSTGRES_PASSWORD: gnucash_password
       POSTGRES_DB: gnucash
     ports:
-      - "5432:5432"
+      - "${DATABASE_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
     networks:
       - gnucash-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gnucash"]
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-gnucash}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -25,8 +27,10 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: gnucash-backend
+    env_file:
+      - .env
     ports:
-      - "8080:8080"
+      - "${SERVER_PORT:-8080}:8080"
     environment:
       - DATABASE_HOST=postgres
       - DATABASE_PORT=5432
@@ -34,7 +38,7 @@ services:
       - DATABASE_PASSWORD=gnucash_password
       - DATABASE_NAME=gnucash
       - DATABASE_SSLMODE=disable
-      - JWT_SECRET=your-secret-key-change-this-in-production-min-32-chars
+      - JWT_SECRET=${JWT_SECRET}
     depends_on:
       postgres:
         condition: service_healthy
@@ -42,7 +46,7 @@ services:
       - gnucash-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      test: ["CMD-SHELL", "wget --quiet --tries=1 -O- http://localhost:8080/health > /dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -52,13 +56,101 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - REACT_APP_API_BASE_URL=http://localhost:8080/api/v1
+        - REACT_APP_API_BASE_URL=${REACT_APP_API_BASE_URL:-http://localhost:8080/api/v1}
     container_name: gnucash-frontend
+    env_file:
+      - .env
     depends_on:
       - backend
     networks:
       - gnucash-network
     restart: unless-stopped
+
+  mcp-server:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.mcp
+    container_name: gnucash-mcp-server
+    env_file:
+      - .env
+    ports:
+      - "${MCP_PORT:-8081}:8081"
+    environment:
+      - MCP_PORT=8081
+      - MCP_SERVER_NAME=gnucash-mcp-server
+      - MCP_SERVER_VERSION=1.0.0
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USER=gnucash
+      - DATABASE_PASSWORD=gnucash_password
+      - DATABASE_NAME=gnucash
+      - DATABASE_SSLMODE=disable
+      - GO_ENV=production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - gnucash-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8081"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  agents:
+    build:
+      context: ./agents
+      dockerfile: Dockerfile
+    container_name: gnucash-agents
+    env_file:
+      - .env
+    ports:
+      - "${AGENTS_PORT:-8083}:8083"
+    environment:
+      - HOST=${AGENTS_HOST:-0.0.0.0}
+      - PORT=${AGENTS_PORT:-8083}
+      - MCP_SERVER_URL=${MCP_SERVER_URL:-http://mcp-server:8081}
+      - OPENAI_API_KEY=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
+      - OPENAI_API_URL=https://openrouter.ai/api/v1
+      - MODEL_NAME=openai/gpt-oss-120b
+    depends_on:
+      mcp-server:
+        condition: service_healthy
+    networks:
+      - gnucash-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8083/api/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  chainlit:
+    build:
+      context: ./chainlit
+      dockerfile: Dockerfile
+    container_name: gnucash-chainlit
+    env_file:
+      - .env
+    ports:
+      - "${CHAINLIT_PORT:-8082}:8082"
+    environment:
+      - AGENTS_SERVICE_URL=${AGENTS_SERVICE_URL:-http://agents:8083}
+    depends_on:
+      agents:
+        condition: service_healthy
+    networks:
+      - gnucash-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8082')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
 volumes:
   postgres_data:

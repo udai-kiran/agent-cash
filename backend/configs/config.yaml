@@ -4,15 +4,15 @@ server:
   writeTimeout: 15s
 
 database:
-  host: localhost
+  host: postgres
   port: 5432
   dbname: gnucash
   sslmode: disable
   maxConns: 10
   minConns: 2
 
-# jwt.secret and database credentials must be set via environment variables:
-#   JWT_SECRET, DATABASE_USER, DATABASE_PASSWORD
+# jwt.secret, database host, and database credentials must be set via environment variables:
+#   DATABASE_HOST, DATABASE_PORT, DATABASE_NAME, DATABASE_USER, DATABASE_PASSWORD, DATABASE_SSLMODE, JWT_SECRET
 
 jwt:
   accessTokenTTL: 15m
@@ -21,3 +21,11 @@ jwt:
 cors:
   allowedOrigins:
     - http://localhost:3000
+
+# MCP Server Configuration (cmd/mcp-server)
+# The MCP server uses environment variables for configuration:
+#   MCP_PORT - Port for MCP server to listen on (default: 8081)
+#   MCP_SERVER_NAME - Server name for MCP protocol (default: gnucash-mcp-server)
+#   MCP_SERVER_VERSION - Server version for MCP protocol (default: 1.0.0)
+#   DATABASE_* - Same database environment variables as HTTP server
+#   GO_ENV - Set to "production" for production logging

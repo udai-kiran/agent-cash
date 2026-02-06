@@ -59,6 +59,7 @@ make stop       # Stop services
 Services will be available at:
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8080
+- **Chat Interface**: http://localhost:8082 (see [Chat Setup](#chat-interface) below)
 - **PostgreSQL**: localhost:5432
 
 See [DOCKER.md](DOCKER.md) for detailed Docker documentation.
@@ -162,6 +163,34 @@ The application is feature-complete for phases 1-4. It provides:
 - Comprehensive financial analytics
 - Interactive charts and visualizations
 
+## Chat Interface
+
+A conversational AI interface for querying your financial data using natural language!
+
+**Quick Start:**
+```bash
+# Add your OpenAI API key
+cp .env.example .env
+# Edit .env and add: OPENAI_API_KEY=sk-your-key-here
+
+# Start all services (including chat)
+docker-compose up -d
+
+# Open chat interface
+open http://localhost:8082
+```
+
+**Example queries:**
+- "What's my checking account balance?"
+- "Show me expenses from last month"
+- "What's my net worth?"
+- "Find all transactions over $500"
+
+**Documentation:**
+- **[QUICKSTART_CHAT.md](QUICKSTART_CHAT.md)** - 5-minute setup guide
+- **[README_CHAT.md](README_CHAT.md)** - Complete chat documentation
+- **[CHAT_REFERENCE.md](CHAT_REFERENCE.md)** - Quick reference
+
 ## Documentation
 
 - **[DOCKER.md](DOCKER.md)** - Docker setup and deployment guide
@@ -169,6 +198,8 @@ The application is feature-complete for phases 1-4. It provides:
 - **[TESTING.md](TESTING.md)** - Testing and validation guide
 - **[backend/README.md](backend/README.md)** - Backend API documentation
 - **[frontend/README.md](frontend/README.md)** - Frontend development guide
+- **[README_CHAT.md](README_CHAT.md)** - Chat interface guide
+- **[README_MCP.md](README_MCP.md)** - MCP server documentation
 
 ## Quick Commands
 
